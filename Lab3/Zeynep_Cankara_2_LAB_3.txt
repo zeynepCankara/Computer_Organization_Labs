@@ -1,0 +1,552 @@
+# Zeynep Cankara -- 13/03/2019
+# Course: CS224
+# Section: 02
+# Lab: 03
+# Version: 1.2
+# lab3.asm -- Lab 3 Solutions
+
+## Function inserts a node with the given value to the corresponding position in linkedlist
+# Params:
+# 	$a0 - contains pointer to head
+# 	$a1 - contains value of the new node
+# 	$a2 - contains position to insert the node
+# Assumption: (position > 1) no insertion at head
+# If position is out of bounds then insert at end
+# If list is empty no insertion done
+# Returns:  $v0 = -1 (fail) $v0 = 0 (succsessful)
+Insert_n:
+	# push values to stack
+	subi $sp, $sp, 4
+	sw $a0, 0($sp)
+	# check: list empty ?
+	move $t0, $a0 # $t0 = head = cur
+	beq $t0, $0, failInsert
+	# create the node
+	li $a0, 8 # 8 byte reserved [(0)address | (4)data]
+	li $v0, 9
+	syscall # $v0 contains the new node address
+	sw $a1, 4($v0) # store the value
+	# get cur->next
+	lw $t1, 0($t0) # t1 = cur->next
+	li $t2, 2
+	searchPosN:
+		beq $t2, $a2, insertN # cnt == position
+		move $t0, $t1 # cur = cur->next
+		lw $t1, 0($t0) # obtain next pointer
+		# check cur == NULL
+		beq $t1, $0, Insert_end
+		addi $t2, $t2, 1
+		j searchPosN
+		insertN:
+		# obtain cur->next address
+		lw $t1, 0($t0) # t1 = cur->next
+		# store in new node
+		sw $t1, 0($v0)
+		# store new pointers address in cur node
+		sw $v0, 0($t0)
+		# finish process
+		j successInsert
+	Insert_end:
+		sw $v0, 0($t0)
+		sw $0, 0($v0) # set next element to NULL
+	successInsert:
+		li $v0, 0
+		j doneInsert
+	failInsert:
+		li $v0, -1
+	doneInsert:
+		# pop values back from stack
+		lw $a0, 0($sp)
+		move $v1, $a0 # return pointer to head
+		addi $sp, $sp, 4
+		jr $ra
+
+
+## Function deletes the node at position n. If position exceeds boundary deletes from last
+# Params:
+# 	$a0 - contains pointer to head
+# 	$a1 - contains position to delete the node
+# If list is empty no deletion is done
+# Returns:  $v0 = -1 (fail) $v0 = 0 (succsessful)
+Delete_n:
+	# push values to stack
+	subi $sp, $sp, 4
+	sw $a0, 0($sp)
+	# check list empty
+	move $t0, $a0
+	beq $t0, $0, failDel
+	# check value to delete @head
+	beq $a1, 1, delHead
+	# get cur->next
+	lw $t1, 0($t0) # t1 = cur->next
+	li $t2, 2 # t2 = position
+	delPosN:
+		bge $t2, $a1, delN # cnt == position
+		move $t0, $t1 # cur = cur->next
+		lw $t1, 0($t0) # obtain next pointer
+		# check cur->next->next == NULL
+		lw $t5, 0($t1)
+		beq $t5, $0, Del_end
+		addi $t2, $t2, 1 # cnt += 1
+		j delPosN
+		delN:
+		# obtain cur->next address
+		lw $t1, 0($t0) # t1 = cur->next
+		lw $t4, 0($t1) # t4 = cur->next->next
+		# store the address
+		sw $t4, 0($t0)
+		# finish process
+		j successDel
+	delHead:
+		lw $a0, 0($sp) # obtain head pointer from stack
+		lw $t3, 0($a0) # get head pointer's next
+		move $a0, $t3 # head = head->next
+		sw $a0, 0($sp) # store back in stack
+		j successDel
+	Del_end:
+		sw $0, 0($t0)
+		j successDel
+	successDel:
+		li $v0, 0
+		j doneDel
+	failDel:
+		li $v0, -1
+	doneDel:
+		# retieve values back from the stack
+		lw $a0, 0($sp)
+		move $v1, $a0 # obtain address to the head
+		addi $sp, $sp, 4
+		jr $ra
+
+
+
+### @brief: Function deletes nodes with the value x.
+# @params: $a0 head of the list. $a1 value nodes to be deleted contains
+# @returns: $v0 nodes counted so far. $v1 pointer to head
+### ANSWER: No because MIPS does not have an instruction for heap allocation.
+# Thus, as a result of lack of memory allocation instructions memory leaks occur in MIPS.
+Delete_x:
+	# restore the new head pointer in $v1
+	move $v1, $a0
+	# count number of nodes in the linkedlist
+	li $v0, 0
+	beq $v1, $0, done
+	# head node is not empty
+	move $t0, $v1 # t0 = Node *prev = head;
+	lw $t1, 0($t0) # t1 = Node *cur = head->next;
+	# check whether head contains target or not
+	checkHeadTarget:
+		sne $t2, $0, $v1 # t2 = head != NULL
+		lw $t3, 4($v1) # t3 = head->data
+		seq $t4, $a1, $t3 # t4 = head->data == target
+		and $t4, $t4, $t2 # (head != NULL && cur->data == target)
+		bne $t4, 1, headNotTarget # head is not equals target
+		move $v1, $t1  # head = head->next
+		move $t0, $t1 # prev
+		lw $t1, 0($t0) # cur
+		addi $v0, $v0, 1 # TODO: count++
+		j checkHeadTarget
+	headNotTarget:
+		beq $t1, $0, done # cur != NULL
+		lw $t3, 4($t1) # t3 = cur->data
+		seq $t4, $a1, $t3 # t4 = cur->data == target
+		beq $t4, 1, delNode
+		lw $t1, 0($t1) # prev = prev->next;
+		lw $t0, 0($t0) # cur = cur->next;
+		# TODO: count++;
+		j headNotTarget
+		delNode:
+			lw $t4, 0($t1) # obtain next's pointer
+			sw $0, 0($t1) # make current pointer null
+			sw $t4, 0($t0) # prev->next = current->next
+			move $t1, $t4 # cur = cur->next;
+			addi $v0, $v0, 1 # TODO: count++;
+			j headNotTarget
+	done:
+		li $v0, 0 # success indication
+		jr $ra
+
+
+## Function adds nodes and deletes node @ consecutive position
+# $a0 - pointer to head of the list
+# $a1 - contains the position
+# Returns: $v0  = 0 if pos exist else $v0 = -1, $v1 contains pointer to head
+AddNodes:
+	# check position <= 0
+	ble $a1, $0, failAdd
+	# allocate stack
+	subi $sp, $sp, 4
+	sw $a0, 0($sp)
+	# initialize current position
+	move $t0, $a0 # t0 = cur = head
+	lw $t1, 0($t0) # t1 = cur->next
+	li $t2, 1
+	findPos:
+		beq $t2, $a1, foundPos # change pointers
+		beq $t1, $0, successAdd # do nothing no consecutive elements
+		move $t0, $t1 # cur = cur->next
+		lw $t1, 0($t0) # t1 = cur->next
+		addi $t2, $t2, 1 # pos += 1
+		j findPos
+		foundPos:
+			# check last element
+			beq $t1, $0, successAdd
+			# cur->data = cur->data + cur->next->data
+			lw $t4, 4($t0)
+			lw $t5, 4($t1)
+			add $t4, $t4, $t5 # t4 contains sum value
+			sw $t4, 4($t0)
+			# now delete the node
+			lw $t4, 0($t1) # t4 contains cur->next->next
+			sw $t4, 0($t0)
+			j successAdd
+	successAdd:
+		li $v0, 0
+		j doneAdd
+	failAdd:
+		li $v0, -1
+	doneAdd:
+		lw $a0, 0($sp)
+		move $v1, $a0 # obtain the head back
+		addi $sp, $sp, 4
+		jr $ra
+
+
+## Function swaps two consecutive nodes
+# $a0 - pointer to head of the list
+# $a1 - contains the position of the first mode to be swapped
+# Returns: $v0  = 0 if pos exist else $v0 = -1, $v1 contains pointer to head
+SwapNodes:
+	# check position <= 0
+	ble $a1, $0, failSwap
+	# check head
+	bne $a1, 1, notHeadSwap
+	move $t0, $a0
+	lw $t1, 0($t0) # cur->next
+	lw $t2, 0($t1) # cur->next->next
+	sw $t2, 0($t0) # cur->next = cur->next->next
+	sw $t0, 0($t1) # cur->next = cur
+	move $a0, $t1
+	notHeadSwap:
+	# allocate stack
+	subi $sp, $sp, 4
+	sw $a0, 0($sp)
+	beq $a1, 1, successSwap
+	# initialize current position
+	move $t0, $a0 # t0 = cur = head
+	lw $t1, 0($t0) # t1 = cur->next
+	li $t2, 1 # pos  = 1
+	findSwapPos:
+		beq $t2, $a1, foundSwap # change pointers
+		beq $t1, $0, successSwap # do nothing no consecutive elements
+		addi $t2, $t2, 1 # pos += 1
+		bne $t2, $a1, skip
+		move $t5, $t0 # cur->prev
+		skip:
+			move $t0, $t1 # cur = cur->next
+			lw $t1, 0($t0) # t1 = cur->next
+			j findSwapPos
+		foundSwap:
+			# check last element
+			beq $t1, $0, successSwap
+			sw $t1, 0($t5) # prev->next = cur->next
+			lw $t4, 0($t1) # store t1's next in t4
+		    sw $t4, 0($t0) # t0->next = t1->next
+		    sw $t0, 0($t1) # t1->next = t0
+			j successSwap
+	successSwap:
+		li $v0, 0
+		j doneSwap
+	failSwap:
+		li $v0, -1
+	doneSwap:
+		lw $a0, 0($sp)
+		move $v1, $a0 # obtain the head back
+		addi $sp, $sp, 4
+		jr $ra
+
+## Recursive Function finds sum within value range specified by the user
+# $a0 - contains pointer to the head of the list
+# $a1 - contains index1
+# $a2 - contains index2
+# Assumption index1 <= index2
+# Returns: $v1 - head of the list
+# $v0 - contains sum
+FindSumInRange:
+	# push values to stack
+	subi $sp, $sp, 8
+	sw	$a0, 4($sp)
+	sw	$ra, 0($sp)
+	# if head pointer $a0 == $0 (NULL) stop
+	bne $a0, $0, elseSumInRange
+	li $v0, 0 # initialize the sum
+	# retrieve back the stack pointer
+	lw	$a0, 4($sp)
+	move $v1, $a0 # $v0 - contains pointer to head
+	addi $sp, $sp, 8
+	jr $ra # goto next
+elseSumInRange:
+	# get the next pointer
+	lw $t1, 0($a0) # t1 contains next pointer
+	move $a0, $t1
+	jal FindSumInRange
+	lw	$a0, 4($sp)
+	lw $t2, 4($a0) # contains the data
+	sge $t4, $t2, $a1 # head->data >= val1
+	sle $t5, $t2, $a2 # head->data <= val2
+	and $t4, $t5, $t4 # $t4 - contains head->data <= val2 && head->data >= val1
+	bne $t4, 1, notIncrementSum
+	add $v0, $v0, $t2 # v1 contains sum
+	notIncrementSum:
+	# retrieve values back from stack
+	lw	$ra, 0($sp)
+	move $v1, $a0 # $v0 - contains pointer to head
+	addi $sp, $sp, 8
+	jr	$ra
+
+
+## Function finds number of common values within 2 linkedlist
+# $a0 - contains pointer to head of first list
+# $a1 - contains pointer to head of second list
+# $v0 - contains result
+countCommonValues:
+	# push values to stack
+	subi $sp, $sp, 8
+	sw $a0, 4($sp)
+	sw $a1, 0($sp)
+	# iterate through the first list
+	li $t2, 0
+	# flag to indicate whether there is a prev value
+	li $t6, -1
+	whileLoop:
+		beq $a0, $0, endCountCommon
+		# get current value
+		lw $t3, 4($a0)
+		move $t4, $a1
+		whileLoop2:
+			beq $t4, $0, notCommon
+			# get the current value
+			lw $t5, 4($t4)
+			beq $t3, $t5, successCommon
+			lw $t4, 0($t4)
+			j whileLoop2
+		successCommon:
+			beq $t6, $t5, notcountIt
+			addi $t2, $t2, 1 # increment the number
+			move $t6, $t5
+			notcountIt:
+		notCommon:
+		lw $a0, 0($a0) # load next value
+		j whileLoop
+	endCountCommon:
+	move $v0, $t2
+	# retieve values back from the stack
+	lw $a0, 4($sp)
+	lw $a1, 0($sp)
+	addi $sp, $sp, 8
+	jr $ra
+
+
+
+#### NEW OPTIONS ====================
+la $a0,msg133	# put msg118 address into a0 ADDNODES
+
+
+	li $v0,4
+
+
+	syscall
+
+la $a0,msg135
+
+
+	li $v0,4
+
+
+	syscall
+la $a0,msg137
+
+
+	li $v0,4
+
+
+	syscall
+
+la $a0,msg141
+
+
+	li $v0,4
+
+
+	syscall
+### =========================
+
+
+
+
+
+
+# Add Nodes Option
+T8: bne $s1, 7, T9
+
+la $a0,msg134	# put msg134 address into a0
+
+
+	li $v0,4	# system call to print
+
+
+	syscall		#   out the msg134 string
+
+
+	li $v0,5	# system call to read
+
+
+	syscall		#   in the value x
+
+	move $a1, $v0	# put x value into a1 before the call
+
+	move $a0, $s0	# put pointer to linked list in a0 before the call
+
+	jal AddNodes
+
+	move $s0, $v1	# put the (possibly revised) pointer into s0
+
+	j ReportZ
+
+# Swap nodes option
+T9: bne $s1, 8, T10
+	la $a0,msg136	# put msg134 address into a0
+
+
+	li $v0,4	# system call to print
+
+
+	syscall		#   out the msg136 string
+
+
+	li $v0,5	# system call to read
+
+
+	syscall		#   in the value x
+
+	move $a1, $v0	# put x value into a1 before the call
+
+	move $a0, $s0	# put pointer to linked list in a0 before the call
+
+	jal SwapNodes
+
+	move $s0, $v1	# put the (possibly revised) pointer into s0
+
+	j ReportZ
+
+
+# SunInRange option
+T10: bne $s1, 9, T11
+	la $a0,msg138	# put msg134 address into a0
+
+
+	li $v0,4	# system call to print
+
+
+	syscall		#   out the msg136 string
+
+
+	li $v0,5	# system call to read
+
+
+	syscall		#   in the value x
+
+
+	move $a1, $v0	# first index
+
+
+	la $a0,msg139	# put msg134 address into a0
+
+
+	li $v0,4	# system call to print
+
+
+	syscall		#   out the msg136 string
+
+
+	li $v0,5	# system call to read
+
+
+	syscall		#   in the value x
+
+
+	move $a2, $v0	# second index
+
+	move $a0, $s0	# put pointer to linked list in a0 before the call
+
+	jal FindSumInRange
+
+	move $s3, $v0
+
+	la $a0, msg140 # print sum message
+	li $v0, 4
+	syscall
+
+	move $a0, $s3 # print the sum
+	li $v0, 1
+	syscall
+
+	li $v0, 0 # always success
+	move $s0, $v1	# put the (possibly revised) pointer into s0
+
+	j ReportZ
+
+
+## CountCommon Option
+T11: bne $s1, 10, T7
+
+	# another call to create linkedlist function
+
+	jal create_list
+
+	move $a1, $v0	# put pointer to linked list in s0 for safe storage
+
+	move $a0, $s0	# put pointer to linked list in a0 before the call
+
+	jal countCommonValues
+
+	move $s3, $v0 # obtain the sum
+
+	move $s4, $a0 # retrieve the original list's pointer
+
+	la $a0, msg142
+	li $v0, 4
+	syscall
+	move $a0, $s3
+	li $v0, 1 # print sum
+	syscall
+
+	move $s0, $s4	# put the (possibly revised) pointer into s0
+	li $v0, 0 # always success
+	j ReportZ
+
+
+
+
+	 .data
+    # MY DATA
+
+    msg133: .asciiz "7 - AddNodes: Add consecutive element value and delete the node \n"
+
+    msg134: .asciiz "Please enter the position you want to add value with it's consecutive: "
+
+    msg135: .asciiz "8 - SwapNodes: Swap 2 consecutive nodes\n"
+
+    msg136: .asciiz "Please enter the position to swap 2 consecutive numbers: "
+
+    msg137: .asciiz "9 - FindSumInRange: Calculates sum within the range specified by the user\n"
+
+    msg138: .asciiz "Please enter the 1st index number: "
+
+    msg139: .asciiz "\nPlease enter the 2nd index number: "
+
+    msg140: .asciiz "\nSum is: "
+
+    msg141: .asciiz "10 - CountCommon: Finds number of common values between 2 linkedlists\n"
+
+    msg142: .asciiz "\nNumber of common values between list1 and list 2: "

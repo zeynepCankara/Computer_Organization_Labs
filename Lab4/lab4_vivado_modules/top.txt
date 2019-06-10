@@ -1,0 +1,32 @@
+`timescale 1ns / 1ps
+
+//////////////////////////////////////////////////////////////////////////////////
+// Company: Bilkent University
+// Engineer: Zeynep Cankara/21703381
+//
+// Date: 03/04/2019
+// Course/Section: CS224
+// Module Name: topmodule
+// Lab.: 4
+// Target Devices: BASYS3 fpga
+// Versions: 1.0
+// Description: Implementing lite MIPS with extended instructions to BASYS3
+
+//////////////////////////////////////////////////////////////////////////////////
+
+// Top level system including MIPS-lite instance and memory
+
+module top(input   logic 	 clk, reset,
+	     output  logic[31:0] writedata, dataadr, pc, instr, // changed to support meaningful pc & instr
+	     output  logic       memwrite);
+
+   logic [31:0] readdata;
+
+   // instantiate processor and memories
+   mips mips (clk, reset, pc, instr, memwrite, dataadr, writedata, readdata);
+   // instantiate imem module
+   imem imem (pc[7:2], instr);
+   // instantiate dmem module
+   dmem dmem (clk, memwrite, dataadr, writedata, readdata);
+
+endmodule

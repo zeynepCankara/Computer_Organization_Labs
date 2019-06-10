@@ -1,0 +1,83 @@
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+
+// Name/ID: Zeynep CANKARA/21703381
+// Course: CS224
+// Section: 2
+// Spring 2019
+// Lab No.: 04
+// Date: 03/04/2019 
+// Module Name: alu_tb
+// Description: alu testbench 
+
+//////////////////////////////////////////////////////////////////////////////////
+
+
+module alu_tb();
+    // initial variables
+    logic[31:0] a, b, result;
+    logic[2:0] alucont;
+    logic zero;
+
+    // initialize the device
+    alu dut(a, b, alucont, result, zero);
+
+    initial 
+    begin
+        a = 4; b = 6; alucont = 3'b000; #10; //and
+        assert(result === 4) else $error("and failed.");
+        a = 6; b = 4; alucont = 3'b001; #10; //or
+        assert(result === 6) else $error("or failed.");
+        a = 1; b = 7; alucont = 3'b010; #10; //add
+        assert(result === 8) else $error("addition failed.");
+        a = 10; b = 8; alucont = 3'b110; #10; //subtract
+        assert(result === 2) else $error("subtraction failed.");
+        a = 18; b = 18; alucont = 3'b110; #10; //subtract
+        assert(result === 0) else $error("subtraction failed.");
+        a = 3; b = 8; alucont = 3'b110; #10; //subtract
+        assert(result === -5) else $error("subtraction failed.");
+        a = 18; b = 19; alucont = 3'b111; #10; //set less than
+        assert(result === 1) else $error("set less than failed.");
+        a = 19; b = 18; alucont = 3'b111; #10; //set less than
+        assert(result === 0) else $error("set less than failed.");
+    end
+endmodule
+
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+
+// Name/ID: Zeynep CANKARA/21703381
+// Course: CS224
+// Section: 2
+// Spring 2019
+// Lab No.: 04
+// Date: 03/04/2019 
+// Module Name: alu
+// Description: alu32-Bit for MIPS-lite
+
+//////////////////////////////////////////////////////////////////////////////////
+
+
+module alu(input  logic [31:0] a, b, 
+           input  logic [2:0]  alucont, 
+           output logic [31:0] result,
+           output logic zero);
+
+    // initial variables
+    assign zero = (result == 0); 
+    
+    // combinational logic
+    always_comb           
+        case (alucont)
+            3'b000: result = a & b; // And (a && b)
+            3'b001: result = a | b; // Or (a || b)
+            3'b010: result = a + b; // Add (a + b)
+            3'b110: result = a - b; // Subtract (a - b)
+            3'b111: result = a < b; // Set less than (a < b)
+            default: result = {32{1'bx}}; // default don't cares
+    endcase
+    
+endmodule
+
+
+

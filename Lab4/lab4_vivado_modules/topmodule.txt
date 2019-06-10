@@ -1,0 +1,38 @@
+`timescale 1ns / 1ps
+
+//////////////////////////////////////////////////////////////////////////////////
+// Company: Bilkent University
+// Engineer: Zeynep Cankara/21703381
+//
+// Date: 03/04/2019
+// Course/Section: CS224
+// Module Name: topmodule
+// Lab.: 4
+// Target Devices: BASYS3 fpga
+// Versions: 1.0
+// Description: Top module to implement MIPS lite into the BASYS3 board
+
+//////////////////////////////////////////////////////////////////////////////////
+
+
+module topmodule(input logic b1, b2, clock,
+            output logic DP, memWrite,
+            output logic [3:0] AN,
+		    output logic [6:0] C);
+
+
+    // 2 clocks to control the pulse
+    logic clk_MIPS, reset_MIPS;
+    // instance variables
+    logic[31:0] writeData, dataAdr, PC, instr;
+
+
+    // initialize pulse controllers
+    pulse_controller control_pulse1(clock, b1, 1'b0, clk_MIPS);
+    pulse_controller control_pulse2(clock, b2, 1'b0, reset_MIPS);
+    // initialize the control display to send data to the 7-segment display
+    display_controller control_display(clock, b2, 4'b1111, writeData[7:4], writeData[3:0], dataAdr[7:4], dataAdr[3:0], AN, C, DP);
+    // initialize MIPS computer
+    top computer_MIPS(clk_MIPS, reset_MIPS, writeData, dataAdr, PC, instr, memWrite);
+
+endmodule

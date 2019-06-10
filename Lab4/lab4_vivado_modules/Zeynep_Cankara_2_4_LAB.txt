@@ -1,0 +1,290 @@
+`timescale 1ns / 1ps
+
+//////////////////////////////////////////////////////////////////////////////////
+
+// Company: Bilkent University
+// Engineer: Zeynep Cankara/21703381
+//
+// Date: 03/04/2019
+// Course/Section: CS224
+// Module Name: topmodule
+// Lab.: 4
+// Target Devices: BASYS3 fpga
+// Versions: 1.0
+// Description: Top module to implement MIPS lite into the BASYS3 board
+
+//////////////////////////////////////////////////////////////////////////////////
+
+
+module topmodule(input logic b1, b2, clk,
+            output logic DP, memWrite,
+            output logic [3:0] AN,
+		    output logic [6:0] C);
+
+
+    // 2 clocks to control the pulse
+    logic clk_MIPS;
+    logic reset_MIPS;
+    // instance variables
+    logic[31:0] writeData, dataAdr, PC, instr;
+
+
+    // initialize pulse controllers
+    pulse_controller control_pulse1(clk, b1, 1'b0, clk_MIPS);
+    pulse_controller control_pulse2(clk, b2, 1'b0, reset_MIPS);
+    // initialize the control display to send data to the 7-segment display
+    display_controller control_display(clk, b2, 4'b1111, writeData[7:4], writeData[3:0], dataAdr[7:4], dataAdr[3:0], AN, C, DP);
+    // initialize MIPS computer
+    top computer_MIPS(clk_MIPS, reset_MIPS, writeData, dataAdr, PC, instr, memWrite);
+
+endmodule
+
+
+`timescale 1ns / 1ps
+
+//////////////////////////////////////////////////////////////////////////////////
+// Company: Bilkent University
+// Engineer: Zeynep Cankara/21703381
+//
+// Date: 03/04/2019
+// Course/Section: CS224
+// Module Name: topmodule
+// Lab.: 4
+// Target Devices: BASYS3 fpga
+// Versions: 1.0
+// Description: Implementing lite MIPS with extended instructions to BASYS3
+
+//////////////////////////////////////////////////////////////////////////////////
+
+// Top level system including MIPS-lite instance and memory
+
+module top(input   logic 	 clk, reset,
+	     output  logic[31:0] writedata, dataadr, pc, instr, // changed to support meaningful pc & instr
+	     output  logic       memwrite);
+
+   logic [31:0] readdata;
+
+   // instantiate processor and memories
+   mips mips (clk, reset, pc, instr, memwrite, dataadr, writedata, readdata);
+   // instantiate imem module
+   imem imem (pc[7:2], instr);
+   // instantiate dmem module
+   dmem dmem (clk, memwrite, dataadr, writedata, readdata);
+
+endmodule
+
+
+///////////////////////////  TOP MODULE TEST BENCH //////////////////////////////////
+
+module top_tb();
+
+// initial variables
+logic[31:0] writeData, dataAdr, pc, instr;
+logic clk, reset, memWrite;
+
+// device under test
+top dut(clk, reset, writeData, dataAdr, pc, instr, memWrite);
+
+initial
+    begin
+        clk = 0;
+        reset = 1;
+        #20ns; reset = 0; // reset signal after 20ns
+    end
+
+always
+    begin
+        #10; clk = ~clk;  // clock rising edge every 10 ns
+    end
+
+endmodule
+
+
+//////////////////////////////////////////////////////////////////////////////////
+
+// Name/ID: Zeynep CANKARA/21703381
+// Course: CS224
+// Section: 2
+// Spring 2019
+// Lab No.: 04
+// Date: 03/04/2019
+// Module Name: alu_tb
+// Description: alu testbench
+
+//////////////////////////////////////////////////////////////////////////////////
+
+
+module alu_tb();
+    // initial variables
+    logic[31:0] a, b, result;
+    logic[2:0] alucont;
+    logic zero;
+
+    // initialize the device
+    alu dut(a, b, alucont, result, zero);
+
+    initial
+    begin
+        a = 4; b = 6; alucont = 3'b000; #10; //and
+        assert(result === 4) else $error("and failed.");
+        a = 6; b = 4; alucont = 3'b001; #10; //or
+        assert(result === 6) else $error("or failed.");
+        a = 1; b = 7; alucont = 3'b010; #10; //add
+        assert(result === 8) else $error("addition failed.");
+        a = 10; b = 8; alucont = 3'b110; #10; //subtract
+        assert(result === 2) else $error("subtraction failed.");
+        a = 18; b = 18; alucont = 3'b110; #10; //subtract
+        assert(result === 0) else $error("subtraction failed.");
+        a = 3; b = 8; alucont = 3'b110; #10; //subtract
+        assert(result === -5) else $error("subtraction failed.");
+        a = 18; b = 19; alucont = 3'b111; #10; //set less than
+        assert(result === 1) else $error("set less than failed.");
+        a = 19; b = 18; alucont = 3'b111; #10; //set less than
+        assert(result === 0) else $error("set less than failed.");
+    end
+endmodule
+
+`timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+
+// Name/ID: Zeynep CANKARA/21703381
+// Course: CS224
+// Section: 2
+// Spring 2019
+// Lab No.: 04
+// Date: 03/04/2019
+// Module Name: alu
+// Description: alu32-Bit for MIPS-lite
+
+//////////////////////////////////////////////////////////////////////////////////
+
+
+module alu(input  logic [31:0] a, b,
+           input  logic [2:0]  alucont,
+           output logic [31:0] result,
+           output logic zero);
+
+    // initial variables
+    assign zero = (result == 0);
+
+    // combinational logic
+    always_comb
+        case (alucont)
+            3'b000: result = a & b; // And (a && b)
+            3'b001: result = a | b; // Or (a || b)
+            3'b010: result = a + b; // Add (a + b)
+            3'b110: result = a - b; // Subtract (a - b)
+            3'b111: result = a < b; // Set less than (a < b)
+            default: result = {32{1'bx}}; // default don't cares
+    endcase
+
+endmodule
+
+// ======================== IMEM MODULE =============
+
+module imem ( input logic [5:0] addr, output logic [31:0] instr);
+
+// imem is modeled as a lookup table, a stored-program byte-addressable ROM
+	always_comb
+	   case ({addr,2'b00})		   	// word-aligned fetch
+//		address		instruction
+//		-------		-----------
+		8'h00: instr = 32'h20020005;  	// addi $v0, $0, 0x0005
+		8'h04: instr = 32'h2003000c;  	// addi $v1, $0, 0x000c
+		8'h08: instr = 32'h2067fff7;  	// addi $a3, $v1, 0xfff7
+		8'h0c: instr = 32'h00e22025;  	// or $a0, $a3, $v0
+		8'h10: instr = 32'h00642824;    // and $a1, $v1, $a0
+		8'h14: instr = 32'h00a42820;    // add $a1, $a1, $a0
+		8'h18: instr = 32'h10a7000a;    // beq $a1, $a1, $a0
+		8'h1c: instr = 32'h0064202a;    // slt $a0, $v1, $a0
+		8'h20: instr = 32'h10800001;    // beq $a0, $0, 0x0001
+		8'h24: instr = 32'h20050000;    // addi $a1, $0, 0x0000
+		8'h28: instr = 32'h00e2202a;    // slt $a0, $a3, $v0
+		8'h2c: instr = 32'h00853820;    // add $a3, $a0, $a1
+		8'h30: instr = 32'h00e23822;    // sub $a3, $a3, $v0
+		8'h34: instr = 32'hac670044;    // sw $a3, 0x0044, $v1
+		8'h38: instr = 32'h8c020050;    // lw $v0, 0x0050, $0
+		8'h3c: instr = 32'h08000011;    // j 0x00000011
+		8'h40: instr = 32'h20020001;    // addi $v0, $0, 0x0001
+		8'h44: instr = 32'hac020054;    // sw $v0, 0x0054, $0
+		// ========= testing new instruction ========
+		8'h48: instr = 32'h20040003;    // addi $a0, $0, 3
+		//8'h44: instr = 32'h20050001;  // addi $a1, $0, 1
+		8'h4c: instr = 32'h38850001;    // subi $a1, $a0, 1
+		8'h50: instr = 32'h20000000;    // nop
+		// ========= end of instruction test ========
+		8'h54: instr = 32'h08000012;	// j 0x00000012
+	     default:  instr = {32{1'bx}};	// unknown address
+	   endcase
+endmodule
+
+
+// ======================== IMEM MODULE END =============
+
+// ======================== MAIN DECODER  =============
+module maindec (input logic[5:0] op,
+	              output logic memtoreg, memwrite, branch,
+	              output logic alusrc, regdst, regwrite, jump,
+	              output logic[1:0] aluop );
+   logic [8:0] controls;
+
+   assign {regwrite, regdst, alusrc, branch, memwrite,
+                memtoreg,  aluop, jump} = controls;
+
+  // Decoder takes 6-bit opcode and determines the control signals needed to execute the instruction
+  always_comb
+    case(op)
+      6'b000000: controls <= 9'b110000100; // R-type
+      6'b100011: controls <= 9'b101001000; // LW
+      6'b101011: controls <= 9'b001010000; // SW
+      6'b000100: controls <= 9'b000100010; // BEQ
+      6'b001000: controls <= 9'b101000000; // ADDI (nop uses the same opcode)
+      6'b000010: controls <= 9'b000000001; // J
+      6'b001110: controls <= 9'b101000010; // SUBI (new instruction)
+      default:   controls <= 9'bxxxxxxxxx; // illegal op
+    endcase
+endmodule
+
+// ======================== MAIN DECODER END  =============
+
+
+///////////////////========= CONSTRAINT ======///////////////////////////////////////
+
+## General constraint file for the basys3 board
+
+# Clock signal
+set_property PACKAGE_PIN W5 [get_ports clk]
+	set_property IOSTANDARD LVCMOS33 [get_ports clk]
+
+
+# LEDs
+set_property PACKAGE_PIN U16 [get_ports {memWrite}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {memWrite}]
+
+#7 segment display
+set_property PACKAGE_PIN W7 [get_ports {C[6]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {C[6]}]
+set_property PACKAGE_PIN W6 [get_ports {C[5]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {C[5]}]
+set_property PACKAGE_PIN U8 [get_ports {C[4]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {C[4]}]
+set_property PACKAGE_PIN V8 [get_ports {C[3]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {C[3]}]
+set_property PACKAGE_PIN U5 [get_ports {C[2]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {C[2]}]
+set_property PACKAGE_PIN V5 [get_ports {C[1]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {C[1]}]
+set_property PACKAGE_PIN U7 [get_ports {C[0]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {C[0]}]
+
+set_property PACKAGE_PIN V7 [get_ports DP]
+	set_property IOSTANDARD LVCMOS33 [get_ports DP]
+
+set_property PACKAGE_PIN U2 [get_ports {AN[0]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {AN[0]}]
+set_property PACKAGE_PIN U4 [get_ports {AN[1]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {AN[1]}]
+set_property PACKAGE_PIN V4 [get_ports {AN[2]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {AN[2]}]
+set_property PACKAGE_PIN W4 [get_ports {AN[3]}]
+	set_property IOSTANDARD LVCMOS33 [get_ports {AN[3]}]
